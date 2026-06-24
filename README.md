@@ -96,9 +96,10 @@ exactly as before; this only picks up the result afterward.
 - Any **image** you capture while watching is written to disk as a plain PNG under
   `~\.claude\shots`. Run `shot-clear` to wipe them, and keep `shot-watch` **off**
   except during active config bursts.
-- Sharing any screenshot with Claude Code transmits that image to the model — true
-  of any screenshot, with or without this tool.
-- The scripts do **no network activity**. Everything is local file writes.
+- The scripts themselves do **no network activity**. Everything is local file writes.
+- However keep in mind that sharing any screenshot with Claude Code transmits that image to the model — true
+  of any screenshot, with or without this tool. 
+
 
 ## Limitations
 
@@ -111,6 +112,12 @@ exactly as before; this only picks up the result afterward.
 
 Remove the dot-source line from your PowerShell `$PROFILE`, then delete
 `~\.claude\scripts\shot-*.ps1` and `~\.claude\shots`.
+
+## Contributing
+
+Issues and pull requests are welcome — bug reports, PowerShell 7 / `pwsh` support,
+or a recording-to-frames bridge are all fair game. It's a small, single-purpose tool;
+keep changes focused and cross-platform-aware where it matters.
 
 ## License
 
