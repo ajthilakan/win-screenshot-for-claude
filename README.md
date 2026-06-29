@@ -49,9 +49,12 @@ terminal. Open a new terminal afterward.
 ## Usage
 
 ```powershell
-shot               # capture clipboard image -> PNG, copy its path to the clipboard
-shot-watch         # live feed: prints + copies the path for every capture (Ctrl+C to stop)
-shot-clear         # delete all saved screenshots (prompts; -Force to skip)
+shot                       # capture clipboard image -> PNG, copy its path to the clipboard
+shot-watch                 # live feed: prints + copies the path for every capture (Ctrl+C to stop)
+shot-clear                 # delete all saved screenshots (prompts; -Force to skip)
+shot-save all              # move every saved shot into your vault folder
+shot-save <name...>        # move only the named shots into your vault folder
+shot-save-config '<path>'  # set the vault destination (run with no path to show it)
 ```
 
 **Manual mode** — grab one or two screenshots:
@@ -72,9 +75,60 @@ shot-clear         # delete all saved screenshots (prompts; -Force to skip)
    ```
 3. `Ctrl+C` to stop the feed when you're done.
 
-Tip: once installed, you can run `shot` straight from the Claude Code prompt with
-`!shot` — Claude sees the printed path in the command output and reads the image
-for you, no manual paste at all.
+**Saving keepers to a vault** — promote the shots worth keeping out of the temporary
+folder and into a permanent one (a notes vault, a project folder, anywhere):
+
+1. Point `shot-save` at a destination once. It must already exist (or pass `-Create`):
+   ```powershell
+   shot-save-config 'C:\Users\you\Obsidian\attachments\Claude Terminal screenshots'
+   # an Obsidian attachments folder is just an example — any folder works
+   ```
+   Run `shot-save-config` with no argument any time to see the current destination.
+2. Capture shots as usual with `shot` / `shot-watch`, then move them:
+   ```powershell
+   shot-save all                       # move every saved shot
+   shot-save shot-20260624-154201.png  # or move only the ones you name
+   ```
+3. `shot-save` **moves** the files (it doesn't copy), then prints two lists for the moved
+   shots — their new file paths, and ready-to-paste markdown embeds:
+   ```
+   File paths:
+   C:\Users\you\Obsidian\attachments\Claude Terminal screenshots\shot-20260624-154201.png
+
+   Markdown embeds:
+   ![](<C:\Users\you\Obsidian\attachments\Claude Terminal screenshots\shot-20260624-154201.png>)
+   ```
+   The embed uses the angle-bracket form so paths with spaces still render. A name that
+   already exists in the destination is auto-renamed (`-1`, `-2`, …) — `shot-save` never
+   overwrites a file in your vault.
+
+### Running it from Claude Code's `!` prompt
+
+You can run `shot` straight from the Claude Code prompt with `!shot` — Claude sees the
+printed path in the command output and reads the image for you, no manual paste at all.
+
+One catch: `shot` is a **PowerShell** command, so `!shot` only works if your `!` prompt
+is running PowerShell. On Windows, Claude Code's `!` prompt defaults to **Git Bash** when
+it's installed — there, `!shot` gives `command not found`. Two ways to fix it:
+
+**Option 1 — add a Git Bash shim (recommended).** Drop a tiny executable named `shot` on
+your PATH that calls the PowerShell script. Run this once in a Git Bash terminal:
+
+```bash
+printf '#!/usr/bin/env bash\nexec powershell.exe -sta -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/.claude/scripts/shot.ps1"\n' > ~/.local/bin/shot && chmod +x ~/.local/bin/shot
+```
+
+(Use any directory on your PATH; `~/.local/bin` is on Git for Windows' default PATH.) Now
+`!shot` works from the `!` prompt. A `shot()` *function* in `~/.bashrc` will **not** work
+here — each `!` command is a fresh non-interactive shell that never sources `.bashrc`; a
+PATH executable is found regardless. Write the file from Git Bash (as above), not from
+PowerShell, or it lands as UTF-16-with-BOM that bash can't parse.
+
+**Option 2 — make the `!` prompt use PowerShell.** Set `"defaultShell": "powershell"` in
+`~/.claude/settings.json` (plus `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` in your environment on
+Windows). Then `!shot` calls the function directly. Note this switches **all** your `!`
+commands — and Claude's own shell tool — to PowerShell, not just `shot`. (I haven't
+personally tested this path — Option 1 is what I run.)
 
 ## How it works
 
@@ -84,7 +138,12 @@ for you, no manual paste at all.
   and, whenever a **new** image appears, does the same thing automatically — saving
   the PNG, copying its path, and **printing** the path so you keep a running list of
   every capture. `Ctrl+C` stops it.
-- The shots folder self-prunes to the 100 most recent captures.
+- The shots folder self-prunes to the 100 most recent captures. `shot-save` lets you move
+  the ones worth keeping into a permanent folder before they're pruned.
+- `shot-save` **moves** files from `~\.claude\shots` into the folder you set with
+  `shot-save-config` (stored in `~\.claude\shot-save.config.json`). It only ever touches
+  files matching `shot-*.png`, rejects names containing path separators or `..`, and
+  auto-renames rather than overwriting an existing file in the destination.
 
 It does **not** replace or interfere with Snipping Tool — `Win+Shift+S` works
 exactly as before; this only picks up the result afterward.
@@ -111,7 +170,8 @@ exactly as before; this only picks up the result afterward.
 ## Uninstall
 
 Remove the dot-source line from your PowerShell `$PROFILE`, then delete
-`~\.claude\scripts\shot-*.ps1` and `~\.claude\shots`.
+`~\.claude\scripts\shot-*.ps1`, `~\.claude\shots`, and `~\.claude\shot-save.config.json`
+(if you set a vault destination). Files already moved into your vault are left untouched.
 
 ## Contributing
 
