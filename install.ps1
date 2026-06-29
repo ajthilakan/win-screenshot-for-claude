@@ -1,4 +1,4 @@
-# install.ps1 — set up shot-for-claude on this machine.
+# install.ps1 - set up shot-for-claude on this machine.
 # Copies the scripts to ~\.claude\scripts, creates the shots folder, and adds a
 # single dot-source line to your PowerShell profile. Idempotent and safe to re-run.
 
@@ -24,7 +24,7 @@ if ($existing -notmatch 'shot-for-claude') {
     Add-Content -Path $PROFILE -Value "`r`n# shot-for-claude screenshot helpers`r`n$line"
     Write-Host "Added loader to your PowerShell profile: $PROFILE" -ForegroundColor Green
 } else {
-    Write-Host "Profile already loads shot-for-claude — skipped." -ForegroundColor DarkGray
+    Write-Host "Profile already loads shot-for-claude - skipped." -ForegroundColor DarkGray
 }
 
 Write-Host ""
