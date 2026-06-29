@@ -1,2 +1,5 @@
 shots/
 *.png
+
+# Planning docs live in my Obsidian vault, not the repo (unless explicitly published).
+docs/plans/
