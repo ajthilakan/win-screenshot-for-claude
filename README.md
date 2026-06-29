@@ -34,6 +34,8 @@ That's it. No clipboard hacks, no manual file wrangling.
 
 ## Install
 
+### 1. Base install (PowerShell) — required
+
 Requires Windows PowerShell 5.1+ (ships with Windows). From a PowerShell prompt:
 
 ```powershell
@@ -45,6 +47,22 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 The installer copies the scripts to `~\.claude\scripts`, creates `~\.claude\shots`,
 and adds one line to your PowerShell `$PROFILE` so the commands load in every
 terminal. Open a new terminal afterward.
+
+### 2. Optional — use from Git Bash or Claude Code's `!` prompt
+
+The commands are PowerShell. If you'd rather call them from **Git Bash** — or from
+Claude Code's `!` prompt, which defaults to Git Bash on Windows — run the bash-shim
+installer **after** step 1, from a Git Bash terminal:
+
+```bash
+./install-bash-shims.sh
+```
+
+It drops a thin wrapper for each command into `~/.local/bin` (on Git for Windows'
+default PATH), so `shot`, `shot-watch`, `shot-clear`, `shot-save`, and
+`shot-save-config` all work from bash too. Each wrapper just calls the PowerShell
+script — PowerShell stays the engine. See the [`!` prompt notes](#running-it-from-claude-codes--prompt)
+for per-command caveats.
 
 ## Usage
 
@@ -104,31 +122,37 @@ folder and into a permanent one (a notes vault, a project folder, anywhere):
 
 ### Running it from Claude Code's `!` prompt
 
-You can run `shot` straight from the Claude Code prompt with `!shot` — Claude sees the
-printed path in the command output and reads the image for you, no manual paste at all.
+With the optional bash shims installed (Install step 2), you can run the commands
+straight from Claude Code's `!` prompt — e.g. `!shot` saves a capture and prints its
+path, which Claude reads with no manual paste at all.
 
-One catch: `shot` is a **PowerShell** command, so `!shot` only works if your `!` prompt
-is running PowerShell. On Windows, Claude Code's `!` prompt defaults to **Git Bash** when
-it's installed — there, `!shot` gives `command not found`. Two ways to fix it:
+The `!` prompt is a **non-interactive, one-shot** shell, so a couple of commands behave
+differently there than in a full terminal:
 
-**Option 1 — add a Git Bash shim (recommended).** Drop a tiny executable named `shot` on
-your PATH that calls the PowerShell script. Run this once in a Git Bash terminal:
+| Command            | Git Bash / PowerShell terminal | Claude Code `!` prompt |
+| ------------------ | ------------------------------ | ---------------------- |
+| `shot`             | ✅                             | ✅ `!shot` |
+| `shot-save`        | ✅                             | ✅ `!shot-save all` |
+| `shot-save-config` | ✅                             | ✅ `!shot-save-config '<path>'` |
+| `shot-clear`       | ✅ (prompts y/N)               | ✅ with `-Force` — `!shot-clear -Force` (the prompt can't read input there) |
+| `shot-watch`       | ✅ (live feed, Ctrl+C)         | ✋ run it in a real terminal — it's a live loop that would hang the prompt |
 
-```bash
-printf '#!/usr/bin/env bash\nexec powershell.exe -sta -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/.claude/scripts/shot.ps1"\n' > ~/.local/bin/shot && chmod +x ~/.local/bin/shot
-```
+**Prefer not to run the shim installer?** Two alternatives:
 
-(Use any directory on your PATH; `~/.local/bin` is on Git for Windows' default PATH.) Now
-`!shot` works from the `!` prompt. A `shot()` *function* in `~/.bashrc` will **not** work
-here — each `!` command is a fresh non-interactive shell that never sources `.bashrc`; a
-PATH executable is found regardless. Write the file from Git Bash (as above), not from
-PowerShell, or it lands as UTF-16-with-BOM that bash can't parse.
+- **Manual shim** — drop a single executable on your PATH by hand:
+  ```bash
+  printf '#!/usr/bin/env bash\nexec powershell.exe -sta -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/.claude/scripts/shot.ps1" "$@"\n' > ~/.local/bin/shot && chmod +x ~/.local/bin/shot
+  ```
+  A `shot()` *function* in `~/.bashrc` will **not** work — each `!` command is a fresh
+  non-interactive shell that never sources `.bashrc`; a PATH executable is found
+  regardless. Write the file from Git Bash (as above), not from PowerShell, or it lands
+  as UTF-16-with-BOM that bash can't parse.
 
-**Option 2 — make the `!` prompt use PowerShell.** Set `"defaultShell": "powershell"` in
-`~/.claude/settings.json` (plus `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` in your environment on
-Windows). Then `!shot` calls the function directly. Note this switches **all** your `!`
-commands — and Claude's own shell tool — to PowerShell, not just `shot`. (I haven't
-personally tested this path — Option 1 is what I run.)
+- **Switch the `!` shell to PowerShell** — set `"defaultShell": "powershell"` in
+  `~/.claude/settings.json` (plus `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` in your environment
+  on Windows). Then the commands run as their native PowerShell functions. Note this
+  switches **all** your `!` commands — and Claude's own shell tool — to PowerShell, not
+  just these. (Less battle-tested than the shim path.)
 
 ## How it works
 
@@ -170,8 +194,10 @@ exactly as before; this only picks up the result afterward.
 ## Uninstall
 
 Remove the dot-source line from your PowerShell `$PROFILE`, then delete
-`~\.claude\scripts\shot-*.ps1`, `~\.claude\shots`, and `~\.claude\shot-save.config.json`
-(if you set a vault destination). Files already moved into your vault are left untouched.
+`~\.claude\scripts\shot*.ps1`, `~\.claude\shots`, and `~\.claude\shot-save.config.json`
+(if you set a vault destination). If you installed the bash shims, also delete them from
+`~/.local/bin` (`shot`, `shot-watch`, `shot-clear`, `shot-save`, `shot-save-config`).
+Files already moved into your vault are left untouched.
 
 ## Contributing
 
