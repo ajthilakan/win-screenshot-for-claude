@@ -80,6 +80,27 @@ Describe 'shot-save-config' {
         { Get-ShotSaveVaultDir } | Should -Not -Throw
         (Get-ShotSaveVaultDir) | Should -BeNullOrEmpty
     }
+
+    It 'refuses an existing file even with -Create and writes no config' {
+        $asFile = Join-Path $script:tmpRoot 'not-a-dir.png'
+        Set-Content -LiteralPath $asFile -Value 'x' -Encoding UTF8
+
+        shot-save-config $asFile -Create
+
+        Test-Path -LiteralPath $script:tmpCfg | Should -BeFalse
+        ($script:WH -join "`n") | Should -Match 'not a folder'
+    }
+
+    It 'refuses to set the temporary shots folder as the destination' {
+        $fakeShots = Join-Path $script:tmpRoot 'shots'
+        New-Item -ItemType Directory -Path $fakeShots -Force | Out-Null
+        Mock -CommandName Get-ShotSaveDir -MockWith { $fakeShots }
+
+        shot-save-config $fakeShots
+
+        Test-Path -LiteralPath $script:tmpCfg | Should -BeFalse
+        ($script:WH -join "`n") | Should -Match "can't be the temporary shots folder"
+    }
 }
 
 Describe 'shot-save' {
@@ -205,5 +226,53 @@ Describe 'shot-save' {
 
         Test-Path -LiteralPath (Join-Path $script:tShot 'notes.txt') | Should -BeTrue
         Test-Path -LiteralPath (Join-Path $script:tVault 'notes.txt') | Should -BeFalse
+    }
+
+    It 'does not move a file whose extension only superficially matches (shot-A.pngbackup)' {
+        New-FakeShot $script:tShot 'shot-A.png'
+        New-FakeShot $script:tShot 'shot-A.pngbackup'
+
+        shot-save all
+
+        Test-Path -LiteralPath (Join-Path $script:tShot 'shot-A.pngbackup') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:tVault 'shot-A.pngbackup') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $script:tVault 'shot-A.png') | Should -BeTrue
+    }
+
+    It 'guards against combining "all" with extra names and moves nothing' {
+        New-FakeShot $script:tShot 'shot-A.png'
+
+        shot-save all 'shot-A.png'
+
+        Test-Path -LiteralPath (Join-Path $script:tShot 'shot-A.png') | Should -BeTrue
+        (Get-ChildItem -LiteralPath $script:tVault -File -ErrorAction SilentlyContinue).Count | Should -Be 0
+        ($script:WH -join "`n") | Should -Match 'must be used by itself'
+    }
+
+    It 'reports a failed move honestly: only confirmed moves are counted and printed' {
+        New-FakeShot $script:tShot 'shot-A.png'
+        New-FakeShot $script:tShot 'shot-B.png'
+        # Make only shot-B fail to move; shot-A moves for real.
+        Mock -CommandName Move-Item -MockWith { throw 'file is locked' } -ParameterFilter { $LiteralPath -like '*shot-B.png' }
+
+        shot-save all
+
+        # shot-A really moved; shot-B stayed behind.
+        Test-Path -LiteralPath (Join-Path $script:tVault 'shot-A.png') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:tShot  'shot-B.png') | Should -BeTrue
+        # Reporting reflects reality: 1 moved, failure surfaced, embed only for shot-A.
+        ($script:WH -join "`n") | Should -Match 'moved 1 screenshot'
+        ($script:WH -join "`n") | Should -Match 'could not be moved'
+        ($script:WH | Where-Object { $_.StartsWith('![](') }).Count | Should -Be 1
+    }
+
+    It 'prints nothing-moved and no lists when every move fails' {
+        New-FakeShot $script:tShot 'shot-A.png'
+        Mock -CommandName Move-Item -MockWith { throw 'denied' }
+
+        shot-save all
+
+        ($script:WH -join "`n") | Should -Match 'no files were moved'
+        ($script:WH | Where-Object { $_.StartsWith('![](') }).Count | Should -Be 0
     }
 }

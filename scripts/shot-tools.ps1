@@ -201,7 +201,13 @@ function shot-save-config {
 
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
         if ($Create) {
-            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+            New-Item -ItemType Directory -Path $Path -Force -ErrorAction SilentlyContinue | Out-Null
+            # New-Item -ItemType Directory on a path that already exists as a FILE
+            # is a no-op (and doesn't error), so re-verify we actually have a folder.
+            if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+                Write-Host "shot-save-config: '$Path' is not a folder (a file may already exist at that path)." -ForegroundColor Red
+                return
+            }
         } else {
             Write-Host "shot-save-config: '$Path' does not exist or is not a folder. Create it first, or pass -Create." -ForegroundColor Red
             return
@@ -209,6 +215,14 @@ function shot-save-config {
     }
 
     $full = (Resolve-Path -LiteralPath $Path).Path
+
+    # The destination must not be the temporary shots folder itself — that would turn
+    # every move into an in-place rename and let the 100-file prune delete keepers.
+    $shotDirNorm = [System.IO.Path]::GetFullPath((Get-ShotSaveDir)).TrimEnd('\')
+    if ($full.TrimEnd('\') -ieq $shotDirNorm) {
+        Write-Host "shot-save-config: the destination can't be the temporary shots folder itself." -ForegroundColor Red
+        return
+    }
 
     $cfgDir = Split-Path -Parent $cfg
     if ($cfgDir -and -not (Test-Path -LiteralPath $cfgDir)) {
@@ -263,6 +277,13 @@ function shot-save {
         return
     }
 
+    # 'all' is a reserved keyword and must stand alone — guard the easy mistake of
+    # `shot-save all somename`, which would otherwise route to names-mode confusingly.
+    if ($Targets.Count -gt 1 -and ($Targets -contains 'all')) {
+        Write-Host "shot-save: 'all' moves every shot and must be used by itself." -ForegroundColor Yellow
+        return
+    }
+
     $shotDir = Get-ShotSaveDir
     if (-not (Test-Path -LiteralPath $shotDir -PathType Container)) {
         Write-Host "shot-save: nothing to move." -ForegroundColor Yellow
@@ -272,7 +293,14 @@ function shot-save {
 
     $files = @()
     if ($Targets.Count -eq 1 -and $Targets[0] -eq 'all') {
-        $files = @(Get-ChildItem -LiteralPath $shotDir -Filter 'shot-*.png' -File -ErrorAction SilentlyContinue)
+        # -Filter also matches 8.3 short names (e.g. shot-x.pngbak -> SHOT-X~1.PNG),
+        # so re-assert the pattern on the real name, and skip reparse points so a
+        # symlink/junction planted in the shots folder is never relocated.
+        $files = @(Get-ChildItem -LiteralPath $shotDir -Filter 'shot-*.png' -File -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.Name -like 'shot-*.png' -and
+                -not ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+            })
         if ($files.Count -eq 0) {
             Write-Host "shot-save: nothing to move." -ForegroundColor Yellow
             return
@@ -304,7 +332,14 @@ function shot-save {
                 Write-Host "shot-save: '$name' resolved outside the shots folder; skipped." -ForegroundColor Red
                 continue
             }
-            $files += Get-Item -LiteralPath $candidate
+            $item = Get-Item -LiteralPath $candidate
+            # Skip symlinks/junctions: Resolve-Path doesn't dereference them, so moving
+            # one would relocate a link pointing at an arbitrary target.
+            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                Write-Host "shot-save: '$name' is a reparse point (symlink/junction); skipped." -ForegroundColor Red
+                continue
+            }
+            $files += $item
         }
         foreach ($m in $missing) {
             Write-Host "shot-save: '$m' not found in the shots folder." -ForegroundColor Yellow
@@ -315,14 +350,32 @@ function shot-save {
         }
     }
 
-    $moved = @()
+    $moved  = @()
+    $failed = @()
     foreach ($f in $files) {
         $dest = Get-ShotSaveCollisionFreePath -Directory $vault -FileName $f.Name
-        Move-Item -LiteralPath $f.FullName -Destination $dest
-        $moved += $dest
+        try {
+            # -ErrorAction Stop so a non-terminating Move-Item error (locked file,
+            # permission denied, cross-volume/disk-full, a name that became occupied
+            # after the collision check) is caught here instead of being silently
+            # reported as a successful move.
+            Move-Item -LiteralPath $f.FullName -Destination $dest -ErrorAction Stop
+            $moved += $dest
+        } catch {
+            $failed += $f.Name
+            Write-Host "shot-save: failed to move '$($f.Name)': $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+
+    if ($moved.Count -eq 0) {
+        Write-Host "shot-save: no files were moved." -ForegroundColor Red
+        return
     }
 
     Write-Host "shot-save: moved $($moved.Count) screenshot(s) to $vault" -ForegroundColor Green
+    if ($failed.Count -gt 0) {
+        Write-Host "shot-save: $($failed.Count) file(s) could not be moved and remain in the shots folder." -ForegroundColor Yellow
+    }
     Write-Host ""
     Write-Host "File paths:" -ForegroundColor Cyan
     foreach ($p in $moved) { Write-Host $p }
