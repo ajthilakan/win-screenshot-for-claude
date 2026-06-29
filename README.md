@@ -137,22 +137,15 @@ differently there than in a full terminal:
 | `shot-clear`       | ✅ (prompts y/N)               | ✅ with `-Force` — `!shot-clear -Force` (the prompt can't read input there) |
 | `shot-watch`       | ✅ (live feed, Ctrl+C)         | ✋ run it in a real terminal — it's a live loop that would hang the prompt |
 
-**Prefer not to run the shim installer?** Two alternatives:
+**Without the installer**, set up a shim by hand — drop one on your PATH:
 
-- **Manual shim** — drop a single executable on your PATH by hand:
-  ```bash
-  printf '#!/usr/bin/env bash\nexec powershell.exe -sta -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/.claude/scripts/shot.ps1" "$@"\n' > ~/.local/bin/shot && chmod +x ~/.local/bin/shot
-  ```
-  A `shot()` *function* in `~/.bashrc` will **not** work — each `!` command is a fresh
-  non-interactive shell that never sources `.bashrc`; a PATH executable is found
-  regardless. Write the file from Git Bash (as above), not from PowerShell, or it lands
-  as UTF-16-with-BOM that bash can't parse.
+```bash
+printf '#!/usr/bin/env bash\nexec powershell.exe -sta -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/.claude/scripts/shot.ps1" "$@"\n' > ~/.local/bin/shot && chmod +x ~/.local/bin/shot
+```
 
-- **Switch the `!` shell to PowerShell** — set `"defaultShell": "powershell"` in
-  `~/.claude/settings.json` (plus `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` in your environment
-  on Windows). Then the commands run as their native PowerShell functions. Note this
-  switches **all** your `!` commands — and Claude's own shell tool — to PowerShell, not
-  just these. (Less battle-tested than the shim path.)
+Or skip shims entirely: set `"defaultShell": "powershell"` in `~/.claude/settings.json`
+(plus `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` on Windows) to run the `!` prompt as PowerShell —
+though that switches every `!` command, not just these.
 
 ## How it works
 
